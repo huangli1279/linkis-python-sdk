@@ -1,118 +1,178 @@
 # Linkis Python SDK
 
-Python SDK for [Apache Linkis](https://linkis.apache.org/), providing a simple interface to submit and manage jobs.
+Linkis Python SDK是与[Apache Linkis](https://linkis.apache.org/)服务交互的官方Python客户端库。该SDK提供了简便的接口，用于执行代码并获取结果，支持同步和异步操作。
+Linkis Python SDK is the official Python client library for interacting with [Apache Linkis](https://linkis.apache.org/) services. This SDK provides convenient interfaces for executing code and retrieving results, supporting both synchronous and asynchronous operations.
 
-[中文文档](README_CN.md)
+[![PyPI version](https://badge.fury.io/py/linkis-python-sdk.svg)](https://badge.fury.io/py/linkis-python-sdk)
+[![Python Version](https://img.shields.io/pypi/pyversions/linkis-python-sdk.svg)](https://pypi.org/project/linkis-python-sdk/)
 
+## 安装
 ## Installation
 
 ```bash
 pip install linkis-python-sdk
 ```
 
+## 功能特点
 ## Features
 
-- User authentication
-- Job submission and execution
-- Job status monitoring
-- Results retrieval (with pandas DataFrame support)
-- Job termination
+- 支持同步和异步客户端
+- 支持结果缓存
+- 提供数据过滤、排序和分页功能
+- 轻松将结果转换为Pandas DataFrame
 
-## Quick Start
+- Support for synchronous and asynchronous clients
+- Result caching capabilities
+- Data filtering, sorting, and pagination
+- Easy conversion of results to Pandas DataFrame
 
-### Submitting a Job and Getting Results
+## 使用示例
+## Usage Examples
+
+### 同步客户端
+### Synchronous Client
 
 ```python
-from linkis_python_sdk import LinkisClient
+from linkis_python_sdk.client import LinkisClient
+from linkis_python_sdk.config.config import LinkisConfig
 
-# Create a client
-client = LinkisClient(
-    address="http://linkis-gateway:9001",
-    username="your-username",
-    password="your-password"
+# 创建配置
+# Create configuration
+config = LinkisConfig(
+    base_url="http://your-linkis-server/api/rest_j/v1",
+    username="your_username",
+    password="your_password"
 )
 
-# Login
-client.login()
+# 创建客户端
+# Create client
+client = LinkisClient(config)
 
-# Submit a job and wait for results
-result = client.execute(
+# 执行代码
+# Execute code
+code = "SELECT * FROM my_table LIMIT 10"
+query_req = {
+    "columns": [{"column": "id"}, {"column": "name"}],
+    "filters": [{"column": "age", "operator": "gt", "value": 18}],
+    "orderbys": [{"column": "id", "ascending": True}],
+    "page": 1,
+    "page_size": 10
+}
+data, total, error = client.execute_code(
+    code=code,
+    query_req=query_req,
+    engine_type="spark",
+    run_type="sql"
+)
+
+print(f"Total records: {total}")
+print(f"Data: {data}")
+```
+
+### 异步客户端
+### Asynchronous Client
+
+```python
+import asyncio
+from linkis_python_sdk.asyncio.client import LinkisClient
+from linkis_python_sdk.config.config import LinkisConfig
+
+async def main():
+    # 创建配置
+    # Create configuration
+    config = LinkisConfig(
+        base_url="http://your-linkis-server/api/rest_j/v1",
+        username="your_username",
+        password="your_password"
+    )
+    
+    # 创建异步客户端
+    # Create asynchronous client
+    client = LinkisClient(config)
+    
+    # 执行代码
+    # Execute code
+    code = "SELECT * FROM my_table LIMIT 10"
+    query_req = {
+        "columns": [{"column": "id"}, {"column": "name"}],
+        "filters": [{"column": "age", "operator": "gt", "value": 18}],
+        "orderbys": [{"column": "id", "ascending": True}],
+        "page": 1,
+        "page_size": 10
+    }
+    data, total, error = await client.execute_code(
+        code=code,
+        query_req=query_req,
+        engine_type="spark",
+        run_type="sql"
+    )
+    
+    print(f"Total records: {total}")
+    print(f"Data: {data}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## 带缓存的执行
+## Execution with Caching
+
+SDK还支持使用Redis缓存执行结果，以提高性能：
+The SDK also supports caching execution results with Redis to improve performance:
+
+```python
+from redis import ConnectionPool
+from linkis_python_sdk.client import LinkisClient
+from linkis_python_sdk.config.config import LinkisConfig
+
+# 创建Redis连接池
+# Create Redis connection pool
+redis_pool = ConnectionPool(host="localhost", port=6379, db=0)
+
+# 创建配置
+# Create configuration
+config = LinkisConfig(
+    base_url="http://your-linkis-server/api/rest_j/v1",
+    username="your_username",
+    password="your_password"
+)
+
+# 创建带缓存的客户端
+# Create client with caching
+client = LinkisClient(
+    linkis_conf=config,
+    r_pool=redis_pool,
+    cache_expire=1800,  # 缓存过期时间（秒）/ Cache expiration time (seconds)
+    cache_code_prefix="linkis:codecache"  # 缓存键前缀 / Cache key prefix
+)
+
+# 执行带缓存的代码
+# Execute code with caching
+data, total, error = client.execute_code_with_cache(
     code="SELECT * FROM my_table LIMIT 10",
-    run_type="sql",
-    engine_type="spark-2.4.3"
-)
-
-# Convert results to pandas DataFrame
-df = client.get_result_dataframe(result)
-print(df)
-```
-
-### Killing a Running Job
-
-```python
-from linkis_python_sdk import LinkisClient
-
-# Create a client
-client = LinkisClient(
-    address="http://linkis-gateway:9001",
-    username="your-username",
-    password="your-password"
-)
-
-# Login
-client.login()
-
-# Submit a job (don't wait)
-result = client.execute(
-    code="SELECT * FROM my_big_table",
-    run_type="sql",
-    engine_type="spark-2.4.3",
-    wait=False
-)
-
-# Kill the job
-client.kill_job(result['exec_id'])
-```
-
-## API Documentation
-
-### LinkisClient
-
-The main client class for interacting with Linkis.
-
-#### Constructor
-
-```python
-LinkisClient(
-    address: str,
-    token_key: str = None,
-    token_value: str = None, 
-    username: str = None,
-    password: str = None,
-    timeout: int = 60,
-    api_version: str = "v1"
+    query_req={"columns": [{"column": "id"}, {"column": "name"}]},
+    engine_type="spark",
+    run_type="sql"
 )
 ```
 
-- `address`: Linkis gateway address (e.g., "http://127.0.0.1:9001")
-- `token_key`: Authentication token key (optional)
-- `token_value`: Authentication token value (optional)
-- `username`: Username for login (required if token not provided)
-- `password`: Password for login (required if token not provided)
-- `timeout`: Request timeout in seconds
-- `api_version`: API version to use
+## 依赖项
+## Dependencies
 
-#### Methods
+- Python >= 3.9
+- requests
+- pandas
+- redis
+- aiohttp
 
-- `login()`: Authenticate with Linkis server
-- `submit_job(code, run_type, engine_type, source, params)`: Submit a job
-- `get_job_info(task_id)`: Get job status and information
-- `get_job_results(task_id)`: Get result file paths
-- `get_result_content(file_path)`: Get content of a result file
-- `kill_job(exec_id)`: Kill a running job
-- `execute(code, run_type, engine_type, source, params, wait, interval, timeout, callback)`: Submit and optionally wait for job completion
-- `get_result_dataframe(result)`: Convert execution result to pandas DataFrame
+## 开发贡献
+## Development and Contribution
 
+欢迎为Linkis Python SDK做出贡献！请参阅[PUBLISH.md](PUBLISH.md)了解如何构建和发布该包。
+Contributions to the Linkis Python SDK are welcome! Please refer to [PUBLISH.md](PUBLISH.md) for information on how to build and publish the package.
+
+## 许可证
 ## License
 
-Apache License 2.0
+该项目采用[Apache License 2.0](LICENSE)许可证。
+This project is licensed under the [Apache License 2.0](LICENSE). 
